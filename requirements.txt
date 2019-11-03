@@ -1,1 +1,4 @@
 gym==0.15.3
+torch==1.3.0
+baselines==0.1.5
+tensorboard==1.14.0 # to be compatible with tensorflow-gpu in dm_classification_tf
