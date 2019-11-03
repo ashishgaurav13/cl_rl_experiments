@@ -3,6 +3,7 @@ utils.nowarnings()
 
 import sys; sys.path.append('wm2')
 import wm2.craft as craft
+import wm2.tools.misc as utilities
 
 import gym
 from learn import PPO
@@ -13,13 +14,19 @@ from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from collections import deque
 from baselines import bench
 
-# Reaches MeanR = +90 in ~30k steps, 3 mins of training
+# (1) Reaches MeanR = +90 in ~30k steps, 3 mins of training
+# (2) When running with just stopped as an extra feature, it reaches +90 in ~120k steps, 10 mins of training
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 num_processes = 1
 gamma = 0.99
 
 env = craft.IntersectionOnlyEgoEnv()
+
+# Uncomment for (2)
+# env.ego_fn = lambda agent, rs: utilities.combine_dicts(agent.f.get_dict(), rs._p.get_dict(['stopped']))
+# env.make_ready()
+
 env = utils.env.NormalizedActions(env)
 env = utils.torch.make_deterministic(env)
 env = bench.Monitor(env, filename = None)
