@@ -4,6 +4,7 @@ import torch.optim as optim
 from .networks import PolicyPPO
 from .replay_buffer import RolloutStorage
 import utils.torch
+import numpy as np
 
 class PPO():
     def __init__(self,
@@ -81,10 +82,11 @@ class PPO():
             obs, reward, done, infos = envs.step(action)
 
             if log != None:
+                assert(type(log) == dict)
                 for info in infos:
                     if 'episode' in info.keys():
-                        log.append(info['episode']['r'])
-
+                        log['r'].append(info['episode']['r'])
+                    
             # If done then clean the history of observations.
             masks = torch.FloatTensor(
                 [[0.0] if done_ else [1.0] for done_ in done])
