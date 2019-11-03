@@ -1,0 +1,3 @@
+[submodule "wm2"]
+	path = wm2
+	url = git@github.com:ashishgaurav13/wm2
