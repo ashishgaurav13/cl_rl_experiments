@@ -162,3 +162,14 @@ class PolicyPPO(nn.Module):
         dist_entropy = dist.entropy().mean()
 
         return value, action_log_probs, dist_entropy
+    
+    def save_model(self, path, ob_rms = None):
+        print("Saving model to: %s" % path)
+        torch.save([self.state_dict(), ob_rms], path)
+    
+    def load_model(self, path):
+        print("Loading model: %s" % path)
+        state_dict, ob_rms = torch.load(path)
+        self.load_state_dict(state_dict)
+        self.eval()
+        return ob_rms
