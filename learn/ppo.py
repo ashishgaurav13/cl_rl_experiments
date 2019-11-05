@@ -86,6 +86,8 @@ class PPO():
                 for info in infos:
                     if 'episode' in info.keys():
                         log['r'].append(info['episode']['r'])
+                        log['eps_done'] += 1
+                        envs.reset() # Only works for one env (TODO)
                     
             # If done then clean the history of observations.
             masks = torch.FloatTensor(
