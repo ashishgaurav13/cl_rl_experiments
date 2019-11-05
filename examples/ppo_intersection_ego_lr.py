@@ -4,44 +4,111 @@ utils.nowarnings()
 import sys; sys.path.append('wm2')
 import wm2.craft as craft
 import wm2.tools.misc as utilities
+import utils.torch, utils.env, learn
 
-import gym
-from learn import PPO
-import utils.torch, utils.env
 import numpy as np
-import torch
-from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
-from collections import deque
-from baselines import bench
+import gym, torch
+import collections, argparse, os
 
-# (1) Reaches MeanR = +90 in ~30k steps, 3 mins of training
-# (2) When running with just stopped as an extra feature, it reaches +90 in ~120k steps, 10 mins of training
+# Solved in ~35k steps (evaluation over 10 eps = 95+)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def evaluate(agent, eval_env, model_name, num_episodes = 10, render = False):
+
+    global device
+    if not os.path.isfile(model_name):
+        print("Not trained, run with -train")
+        exit(0)
+    ob_rms = agent.actor_critic.load_model(model_name)
+    utils.env.evaluate_ppo(agent.actor_critic, ob_rms, eval_env,
+        device, num_episodes = num_episodes, render = render)
+
+
+def train(agent, envs, num_updates, model_name, track_eps = 25, log_interval = 1,
+    solved_at = 90.0):
+
+    episode_rewards = collections.deque(maxlen = track_eps)
+    log_dict = {'r': episode_rewards, 'eps_done': 0}
+    start = utils.timer()
+
+    for j in range(num_updates):
+
+        agent.pre_step(j, num_updates)
+        agent.step(envs, log = log_dict)
+        vloss, piloss, ent = agent.train()
+
+        if (j+1) % log_interval == 0 and len(log_dict['r']) > 1:
+
+            total_num_steps = (j + 1) * num_processes * num_steps
+            elapsed = "Elapsed %s" % utils.timer_done(start)
+
+            MeanR = np.mean(log_dict['r'])
+            MedR = np.median(log_dict['r'])
+            MinR = np.min(log_dict['r'])
+            MaxR = np.max(log_dict['r'])
+            reward_stats1 = "MeanR,MedR:%.2f,%.2f" % (MeanR, MedR)
+            reward_stats2 = "MinR,MaxR:%.2f,%.2f" % (MinR, MaxR)
+            loss_stats = "Ent:%f, VLoss:%f, PiLoss:%f" % (ent, vloss, piloss)
+            stats = [
+                "Steps:%g" % total_num_steps,
+                "Eps:%d" % log_dict['eps_done'],
+                elapsed,
+                reward_stats1,
+                reward_stats2,
+                loss_stats,
+            ]
+            print(" ".join(stats))
+
+            if MeanR >= solved_at:
+                print("Model solved!")
+                ob_rms = utils.env.get_ob_rms(envs)
+                assert(ob_rms != None)
+                if not os.path.exists("models"): os.mkdir("models")
+                agent.actor_critic.save_model(model_name, ob_rms)
+                exit(0)
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-train", default = False, action = "store_true")
+parser.add_argument("-evaluate", default = False, action = "store_true")
+parser.add_argument("-render", default = False, action = "store_true")
+parser.add_argument("-file", default = "models/intersection_only_ego.pt",
+    help = "(default file is models/intersection_only_ego.pt)")
+args = parser.parse_args()
+if not (args.train or args.evaluate):
+    parser.print_help()
+    exit(0)
+
 num_processes = 1
 gamma = 0.99
-
-env = craft.IntersectionOnlyEgoEnv()
-
-# Uncomment for (2)
-# env.ego_fn = lambda agent, rs: utilities.combine_dicts(agent.f.get_dict(), rs._p.get_dict(['stopped']))
-# env.make_ready()
-
-env = utils.env.NormalizedActions(env)
-env = utils.torch.make_deterministic(env)
-env = bench.Monitor(env, filename = None)
-envs = DummyVecEnv([lambda: env])
-envs = utils.env.VecNormalize(envs, gamma = gamma)
-envs = utils.env.VecPyTorch(envs, device)
-utils.log('intersection_only_ego_lr')
-
+MaxT = 400 # Max number of env steps
 num_env_steps = int(1e6)
 num_steps = 128
 log_interval = 1
+utils.log('intersection_only_ego')
+
+# Create training env
+env = craft.IntersectionOnlyEgoEnv()
+env = utils.env.wrap_env(
+    env,
+    action_normalize = True,
+    time_limit = MaxT,
+    deterministic = True,
+    seed = 0,
+)
+env_fn = lambda: env
+envs = utils.env.vectorize_env(
+    [env_fn],
+    state_normalize = True,
+    device = device,
+    train = True,
+)
+
 obs_space, action_space = envs.observation_space, envs.action_space
 init_obs = envs.reset()
 
-agent = PPO(
+agent = learn.PPO(
     obs_space,
     action_space,
     init_obs,
@@ -50,23 +117,10 @@ agent = PPO(
     gamma = gamma,
 )
 
-num_updates = agent.compute_updates_needed(num_env_steps, num_processes)
-episode_rewards = deque(maxlen=100)
-log_dict = {'r': episode_rewards}
-start = utils.timer()
-
-for j in range(num_updates):
-
-    agent.pre_step(j, num_updates)
-    agent.step(envs, log = log_dict)
-    vloss, piloss, ent = agent.train()
-
-    if (j+1) % log_interval == 0 and len(log_dict['r']) > 1:
-        total_num_steps = (j + 1) * num_processes * num_steps
-        elapsed = "Elapsed %s" % utils.timer_done(start)
-        MeanR, MedR = np.mean(log_dict['r']), np.median(log_dict['r'])
-        MinR, MaxR = np.min(log_dict['r']), np.max(log_dict['r'])
-        reward_stats = "MeanR,MedR:%.2f,%.2f MinR,MaxR:%.2f,%.2f" % (MeanR, MedR, MinR, MaxR)
-        loss_stats = "Ent:%f, VLoss:%f, PiLoss:%f" % (ent, vloss, piloss)
-        stats = ["Steps:%g" % total_num_steps, elapsed, reward_stats, loss_stats]
-        print(" ".join(stats))
+if args.train:
+    assert(not args.render)
+    num_updates = agent.compute_updates_needed(num_env_steps, num_processes)
+    train(agent, envs, num_updates, args.file)
+elif args.evaluate:
+    eval_env = craft.IntersectionOnlyEgoEnv()
+    evaluate(agent, eval_env, args.file, render = args.render)

@@ -111,7 +111,7 @@ def evaluate_ppo(network, ob_rms, env, device, num_episodes = 10,
 
     # envs.close()
 
-    print(" Evaluation using {} episodes: mean reward {:.5f}\n".format(
+    print("Evaluation using {} episodes: mean reward {:.5f}\n".format(
         len(eval_episode_rewards), np.mean(eval_episode_rewards)))
 
 
@@ -154,6 +154,7 @@ def vectorize_env(
         else:
             envs = VecNormalize(envs, ret = False)
             envs.eval()
+            assert(ob_rms != None)
             envs.ob_rms = ob_rms
     
     if device != None:

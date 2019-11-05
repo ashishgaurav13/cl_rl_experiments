@@ -6,4 +6,5 @@ RL experiments in Pytorch for catastrophic forgetting.
 * PPO ([ikostrikov/pytorch-a2c-ppo-acktr-gail](https://github.com/ikostrikov/pytorch-a2c-ppo-acktr-gail))
 
 **Requirements**: Install using `pip3 install -r requirements.txt --user`<br>
-**Examples**: Run an example as `python examples/EXAMPLE.py`; note that some examples need `xvfb-run`
+**Examples**: Run an example as `python examples/EXAMPLE.py`; note that some examples need `xvfb-run` <br>
+**Models**: Saved models in `models`
