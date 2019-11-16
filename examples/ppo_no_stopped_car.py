@@ -30,7 +30,8 @@ def train(agent, envs, num_updates, model_name, track_eps = 25, log_interval = 1
     solved_at = 90.0):
 
     episode_rewards = collections.deque(maxlen = track_eps)
-    log_dict = {'r': episode_rewards, 'eps_done': 0}
+    s = collections.deque(maxlen = track_eps)
+    log_dict = {'r': episode_rewards, 'eps_done': 0, 'satisfactions': s}
     start = utils.timer()
 
     for j in range(num_updates):
@@ -73,33 +74,34 @@ parser = argparse.ArgumentParser()
 parser.add_argument("-train", default = False, action = "store_true")
 parser.add_argument("-evaluate", default = False, action = "store_true")
 parser.add_argument("-render", default = False, action = "store_true")
-parser.add_argument("-file", default = "models/intersection_only_ego.pt",
-    help = "(default file is models/intersection_only_ego.pt)")
+parser.add_argument("-file", default = "models/no_stopped_car.pt",
+    help = "(default file is models/no_stopped_car.pt)")
 args = parser.parse_args()
 if not (args.train or args.evaluate):
     parser.print_help()
     exit(0)
 
-num_processes = 1
+num_processes = 8
 gamma = 0.99
 MaxT = 400 # Max number of env steps
-num_env_steps = int(1e6)
+num_env_steps = int(2e6)
 num_steps = 128
 log_interval = 1
-utils.log('intersection_only_ego')
+# utils.log('no_stopped_car')
 
-# Create training env
-env = craft.IntersectionOnlyEgoEnv()
-env = utils.env.wrap_env(
-    env,
-    action_normalize = True,
-    time_limit = MaxT,
-    deterministic = True,
-    seed = 0,
-)
-env_fn = lambda: env
+def env_fn(i):
+    env = craft.NoStoppedCarEnv()
+    env = utils.env.wrap_env(
+        env,
+        action_normalize = True,
+        time_limit = MaxT,
+        deterministic = True,
+        seed = i,
+    )
+    return lambda: env
+
 envs = utils.env.vectorize_env(
-    [env_fn],
+    [env_fn(i) for i in range(num_processes)],
     state_normalize = True,
     device = device,
     train = True,
@@ -122,5 +124,5 @@ if args.train:
     num_updates = agent.compute_updates_needed(num_env_steps, num_processes)
     train(agent, envs, num_updates, args.file)
 elif args.evaluate:
-    eval_env = craft.IntersectionOnlyEgoEnv()
+    eval_env = craft.NoStoppedCarEnv()
     evaluate(agent, eval_env, args.file, render = args.render)
