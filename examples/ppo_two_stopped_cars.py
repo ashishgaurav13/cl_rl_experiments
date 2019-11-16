@@ -128,10 +128,4 @@ if args.train:
     train(agent, envs, num_updates, args.file)
 elif args.evaluate:
     eval_env = craft.TwoStoppedCarsEnv()
-    # eval_env.reset()
-    # done = False
-    # while not done:
-    #     _, _, done, _ = eval_env.step([1, 0])
-    #     eval_env.render()
-    # exit(0)
     evaluate(agent, eval_env, args.file, render = args.render)

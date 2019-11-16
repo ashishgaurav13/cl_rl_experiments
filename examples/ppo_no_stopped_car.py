@@ -114,6 +114,7 @@ agent = learn.PPO(
     obs_space,
     action_space,
     init_obs,
+    clip_param = 0.3,
     num_steps = num_steps,
     num_processes = num_processes,
     gamma = gamma,
