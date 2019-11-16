@@ -10,7 +10,7 @@ RL experiments in Pytorch for catastrophic forgetting.
 **Models**: Saved models in `models`
 
 **Environments (8 processes, clip = 0.3)**:
-* `NoStoppedCarEnv`: `21504 steps, 443 episodes, 0:00:23`
-* `OneStoppedCarEnv`: `37888 steps, 592 episodes, 0:00:42`
+* `NoStoppedCarEnv`: `27648 steps, 525 episodes, 0:00:22`
+* `OneStoppedCarEnv`: `20480 steps, 473 episodes, 0:00:18`
 * `TwoStoppedCarsEnv`: `100352 steps, 1942 episodes, 0:01:57`
 * `ThreeStoppedCarsSSOEnv`: `130048 steps, 2437 episodes, 0:02:00`
