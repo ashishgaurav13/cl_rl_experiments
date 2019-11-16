@@ -5,6 +5,7 @@ from .gym_wrappers import *
 from baselines import bench
 import utils.torch
 from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
+from baselines.common.vec_env.shmem_vec_env import ShmemVecEnv
 
 def episode(env, policy, process_experience, train,
     episode_num = None, render = False, debug = True, tb = None,
@@ -26,6 +27,7 @@ def episode(env, policy, process_experience, train,
         for _ in range(n_updates): losses += [train()]
         T += 1
         R += reward
+        obs = next_obs
         if render: env.render()
     try:
         losses = np.mean(losses, axis = 0)
@@ -105,7 +107,10 @@ def evaluate_ppo(network, ob_rms, env, device, num_episodes = 10,
         for info in infos:
             if 'episode' in info.keys():
                 eval_episode_rewards.append(info['episode']['r'])
-                print("R:%.2f, T:%d" % (info['episode']['r'], info['episode']['l']))
+                extra = ""
+                if "satisfactions" in info:
+                    extra = ", Reasons: %s" % info["satisfactions"]
+                print("R:%.2f, T:%d%s" % (info['episode']['r'], info['episode']['l'], extra))
                 orig_env.seed(len(eval_episode_rewards)+1000)
                 obs = envs.reset() # Only works for one env (TODO)
 
@@ -145,8 +150,10 @@ def vectorize_env(
     assert(type(envs) == list)
     for env_fn in envs: assert(isfunction(env_fn))
     
-    assert(len(envs) == 1)
-    envs = DummyVecEnv(envs)
+    if len(envs) == 1:
+        envs = DummyVecEnv(envs)
+    else:
+        envs = ShmemVecEnv(envs, context = 'fork')
 
     if state_normalize:
         if train:
