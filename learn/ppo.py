@@ -27,10 +27,19 @@ class PPO():
                  use_gae = True,
                  gae_lambda = 0.95,
                  use_proper_time_limits = False,
-                 gamma = 0.99):
+                 gamma = 0.99,
+                 policy = None,
+                 hidden = -1):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.actor_critic = PolicyPPO(obs_space.shape, action_space).to(self.device)
+        if policy != None:
+            print("Loading provided policy!")
+            self.actor_critic = policy
+        else:
+            if hidden == -1: hidden = 64
+            print("Creating networks with hidden = %d" % hidden)
+            self.actor_critic = PolicyPPO(obs_space.shape, action_space,
+                hidden_size = hidden).to(self.device)
 
         self.clip_param = clip_param
         self.ppo_epoch = ppo_epoch

@@ -97,12 +97,15 @@ class CriticTD3(nn.Module):
 
 class PolicyPPO(nn.Module):
     
-    def __init__(self, obs_shape, action_space, hidden_size = 64):
+    def __init__(self, obs_shape, action_space, hidden_size = 100):
         super(PolicyPPO, self).__init__()
 
         num_inputs = obs_shape[0]
         init_ = lambda m: utils.torch.init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
+        self.num_inputs = num_inputs
+        self.hidden_size = hidden_size
+        self.init_ = init_
 
         self.actor = nn.Sequential(
             init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
