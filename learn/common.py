@@ -10,14 +10,15 @@ import collections, argparse, os
 from itertools import permutations, chain
 
 
-def create_continual_schedule(all_envs, wts, time_limit = 400, rep = 1):
+def create_continual_schedule(all_envs, wts, rep = 1):
     assert(len(all_envs) == len(wts))
     env_id_rep = list(chain(*[[env_id for i in range(wts[env_id])] for env_id in all_envs.keys()]))
     env_ids = []
     for i in range(rep): env_ids += env_id_rep[:]
     env_ids = np.random.permutation(list(env_ids))
-    
+    return env_ids
 
+def create_eval_envs(all_envs, time_limit = 400):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     eval_envs = []
     for eid, (ob_rms_fname, env) in all_envs.items():
@@ -39,7 +40,7 @@ def create_continual_schedule(all_envs, wts, time_limit = 400, rep = 1):
         )
         eval_envs += [envs]
 
-    return env_ids, eval_envs
+    return eval_envs
 
 
 def print_state_dict(s, policy):

@@ -6,4 +6,5 @@ from .replay_buffer import Transition, ReplayMemory, RolloutStorage
 from .noise import OUNoise, AdaptiveParamNoiseSpec
 
 # Reorganized for simplicity
-from .common import train_ppo, print_state_dict, create_continual_schedule
+from .common import train_ppo, print_state_dict, create_continual_schedule, \
+    create_eval_envs
