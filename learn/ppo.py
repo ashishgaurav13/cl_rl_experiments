@@ -23,6 +23,7 @@ class PPO():
                  num_steps = 128,
                  num_processes = None,
                  linear_schedule = True,
+                 linear_schedule_mode = 0,
                  use_gae = True,
                  gae_lambda = 0.95,
                  use_proper_time_limits = False,
@@ -55,7 +56,16 @@ class PPO():
 
         self.lr = lr
         self.linear_schedule = linear_schedule
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=lr, eps=eps)
+        self.linear_schedule_mode = linear_schedule_mode
+        actor_params = []
+        critic_params = []
+        for k, v in self.actor_critic.named_parameters():
+            if "critic" in k:
+                critic_params += [v]
+            else:
+                actor_params += [v]
+        self.actor_optimizer = optim.RMSprop(actor_params, lr=lr, eps = eps)
+        self.critic_optimizer = optim.RMSprop(critic_params, lr=lr, eps = eps)
         self.use_gae = use_gae
         self.gae_lambda = gae_lambda
         self.use_proper_time_limits = use_proper_time_limits
@@ -67,7 +77,8 @@ class PPO():
     def pre_step(self, j, num_updates):
         if self.linear_schedule:
             # decrease learning rate linearly
-            utils.torch.update_linear_schedule(self.optimizer, j, num_updates, self.lr)
+            utils.torch.update_linear_schedule(self.actor_optimizer, j, num_updates, self.lr, mode = self.linear_schedule_mode)
+            utils.torch.update_linear_schedule(self.critic_optimizer, j, num_updates, self.lr, mode = self.linear_schedule_mode)
 
     def step(self, envs, log = None):
 
@@ -153,12 +164,14 @@ class PPO():
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
-                self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss -
-                 dist_entropy * self.entropy_coef).backward()
+                self.actor_optimizer.zero_grad()
+                self.critic_optimizer.zero_grad()
+                (value_loss * self.value_loss_coef).backward()
+                (action_loss - dist_entropy * self.entropy_coef).backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
-                self.optimizer.step()
+                self.actor_optimizer.step()
+                self.critic_optimizer.step()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
