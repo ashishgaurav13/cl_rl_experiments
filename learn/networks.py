@@ -128,6 +128,14 @@ class PolicyPPO(nn.Module):
         else:
             raise NotImplementedError
 
+    def reinit_critic(self):
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.critic = nn.Sequential(
+            self.init_(nn.Linear(self.num_inputs, self.hidden_size)), nn.Tanh(),
+            self.init_(nn.Linear(self.hidden_size, self.hidden_size)), nn.Tanh()).to(device)
+        self.critic_linear = self.init_(nn.Linear(self.hidden_size, 1)).to(device)
+
     def forward(self, inputs):
         x = inputs
         hidden_critic = self.critic(x)
