@@ -73,26 +73,30 @@ def get_ob_rms(envs):
     return None
 
 def evaluate_ppo(network, ob_rms, env, device, num_episodes = 10,
-    time_limit = 400, render = False):
+    time_limit = 400, render = False, wrap = True, silent = False):
 
     orig_env = env
-    env = wrap_env(
-        env,
-        action_normalize = True,
-        time_limit = time_limit,
-        deterministic = True,
-    )
-    env_fn = lambda: env
-    envs = vectorize_env(
-        [env_fn],
-        state_normalize = True,
-        device = device,
-        train = False,
-        ob_rms = ob_rms
-    )
+    if wrap:
+        env = wrap_env(
+            env,
+            action_normalize = True,
+            time_limit = time_limit,
+            deterministic = True,
+        )
+        env_fn = lambda: env
+        envs = vectorize_env(
+            [env_fn],
+            state_normalize = True,
+            device = device,
+            train = False,
+            ob_rms = ob_rms
+        )
+    else:
+        envs = env
     
     eval_episode_rewards = []
-    orig_env.seed(len(eval_episode_rewards)+1000)
+    if wrap:
+        orig_env.seed(len(eval_episode_rewards)+1000)
     obs = envs.reset()
     while len(eval_episode_rewards) < num_episodes:
         with torch.no_grad():
@@ -110,15 +114,19 @@ def evaluate_ppo(network, ob_rms, env, device, num_episodes = 10,
                 extra = ""
                 if "satisfactions" in info:
                     extra = ", Reasons: %s" % info["satisfactions"]
-                print("R:%.2f, T:%d%s" % (info['episode']['r'], info['episode']['l'], extra))
-                orig_env.seed(len(eval_episode_rewards)+1000)
+                if not silent:
+                    print("R:%.2f, T:%d%s" % (info['episode']['r'], info['episode']['l'], extra))
+                if wrap:
+                    orig_env.seed(len(eval_episode_rewards)+1000)
                 obs = envs.reset() # Only works for one env (TODO)
 
     # envs.close()
 
-    print("Evaluation using {} episodes: mean reward {:.5f}\n".format(
-        len(eval_episode_rewards), np.mean(eval_episode_rewards)))
+    if not silent:
+        print("Evaluation using {} episodes: mean reward {:.5f}\n".format(
+            len(eval_episode_rewards), np.mean(eval_episode_rewards)))
 
+    return np.mean(eval_episode_rewards)
 
 # Wrap single env
 def wrap_env(
