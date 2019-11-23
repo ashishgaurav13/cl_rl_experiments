@@ -20,7 +20,7 @@ all_envs = {
 steps = 1.5e5 # 1e6
 network_sizes = [32, 50, 64, 100, 128, 150, 200, 250, 256, 300]
 
-steps_to_solve = utils.json_load(f = "graphs/ens.txt", show = True)
+steps_to_solve = utils.json_load(f = "graphs/1_effect_of_network_size.txt", show = True)
 
 for env_id in all_envs.keys():
     
@@ -38,6 +38,6 @@ for env_id in all_envs.keys():
             learn.train_ppo(env, steps, ob_rms = ob_rms, hidden = hidden,
                 linear_schedule = False, clip_param = 0.3)
         steps_to_solve[str(env_id)][str(hidden)] = total_num_steps
-        utils.json_dump(steps_to_solve, f = "graphs/ens.txt")
+        utils.json_dump(steps_to_solve, f = "graphs/1_effect_of_network_size.txt")
 
-utils.json_dump(steps_to_solve, f = "graphs/ens.txt", show = True)
+utils.json_dump(steps_to_solve, f = "graphs/1_effect_of_network_size.txt", show = True)
