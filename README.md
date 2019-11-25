@@ -20,3 +20,5 @@ To reproduce, run `python examples/ppo_ENV_NAME.py`. If you have an x-server err
 
 **Experiments**:
 * Effect of network size vs number of steps needed to solve, for various environments
+* Baseline for `1SC-O, 1SC, 2SC, 3SC-SSO` in sequence.
+* Baseline for `1SC-O, 1SC, 2SC, 3SC-SSO`, x 4 in a random schedule.
