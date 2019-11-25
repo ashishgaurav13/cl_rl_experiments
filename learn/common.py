@@ -10,7 +10,8 @@ import collections, argparse, os
 from itertools import permutations, chain
 
 
-def create_continual_schedule(all_envs, wts, rep = 1):
+def create_continual_schedule(all_envs, wts = None, rep = 1):
+    if wts == None: wts = [1 for i in range(len(all_envs))]
     assert(len(all_envs) == len(wts))
     env_id_rep = list(chain(*[[env_id for i in range(wts[env_id])] for env_id in all_envs.keys()]))
     env_ids = []
@@ -18,16 +19,18 @@ def create_continual_schedule(all_envs, wts, rep = 1):
     env_ids = np.random.permutation(list(env_ids))
     return env_ids
 
-def create_eval_envs(all_envs, time_limit = 400):
+def create_eval_envs(all_envs, time_limit = 400, seed = 0):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     eval_envs = []
     for eid, (ob_rms_fname, env) in all_envs.items():
         [ob_rms] = torch.load(ob_rms_fname)
+        eval_env = env()
         eval_env = utils.env.wrap_env(
-            env(),
+            eval_env,
             action_normalize = True,
             time_limit = time_limit,
             deterministic = True,
+            seed = seed
         )
         env_fn = lambda: eval_env
         assert(ob_rms != None)
@@ -56,11 +59,15 @@ def print_state_dict(s, policy):
             print("%s => %s (min:%s, max:%s)" % (k, s, mn, mx))
     print("")
 
-
+# verbosity = 0 => TODO
+# verbosity = 1 => minimal information (MeanR, num_steps, eval_rewards)
+# verbosity = 2 => all training information
 def train_ppo(env_class, steps, track_eps = 25, log_interval = 1, solved_at = 90.0,
     num_processes = 8, gamma = 0.99, MaxT = 400, num_steps = 128, clip_param = 0.3,
     linear_schedule = True, policy = None, ob_rms = None, eval_envs = None,
-    eval_eps = -1, hidden = -1, entropy_coef = 0, linear_schedule_mode = 0, lr = 3e-4):
+    eval_eps = -1, hidden = -1, entropy_coef = 0, linear_schedule_mode = 0, lr = 3e-4,
+    training_seed = 0, verbosity = 1):
+    assert(verbosity in [1, 2])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     num_env_steps = int(steps)
@@ -88,6 +95,7 @@ def train_ppo(env_class, steps, track_eps = 25, log_interval = 1, solved_at = 90
     obs_space, action_space = envs.observation_space, envs.action_space
     init_obs = envs.reset()
 
+    torch.manual_seed(training_seed)
     agent = learn.PPO(
         obs_space,
         action_space,
@@ -109,6 +117,7 @@ def train_ppo(env_class, steps, track_eps = 25, log_interval = 1, solved_at = 90
     s = collections.deque(maxlen = track_eps)
     log_dict = {'r': episode_rewards, 'eps_done': 0, 'satisfactions': s}
     start = utils.timer()
+    ret_steps = -1
 
     for j in range(num_updates):
 
@@ -125,17 +134,24 @@ def train_ppo(env_class, steps, track_eps = 25, log_interval = 1, solved_at = 90
             MedR = np.median(log_dict['r'])
             MinR = np.min(log_dict['r'])
             MaxR = np.max(log_dict['r'])
-            reward_stats1 = "MeanR,MedR:%.2f,%.2f" % (MeanR, MedR)
-            reward_stats2 = "MinR,MaxR:%.2f,%.2f" % (MinR, MaxR)
-            loss_stats = "Ent:%f, VLoss:%f, PiLoss:%f" % (ent, vloss, piloss)
+            if verbosity == 1:
+                reward_stats = "MeanR:%.2f" % (MeanR)
+                extra_stats = [reward_stats]
+            elif verbosity == 2:
+                reward_stats1 = "MeanR,MedR:%.2f,%.2f" % (MeanR, MedR)
+                reward_stats2 = "MinR,MaxR:%.2f,%.2f" % (MinR, MaxR)
+                loss_stats = "Ent:%f, VLoss:%f, PiLoss:%f" % (ent, vloss, piloss)
+                extra_stats = [
+                    reward_stats1,
+                    reward_stats2,
+                    loss_stats,
+                ]
             reasons = "Reasons: %s" % (set(list(s)))
             stats = [
                 "Steps:%g" % total_num_steps,
                 "Eps:%d" % log_dict['eps_done'],
                 elapsed,
-                reward_stats1,
-                reward_stats2,
-                loss_stats,
+                *extra_stats,
             ]
             print(" ".join(stats))
             print(reasons)
@@ -149,16 +165,12 @@ def train_ppo(env_class, steps, track_eps = 25, log_interval = 1, solved_at = 90
             sys.stdout.flush()
 
             if MeanR >= solved_at:
-                print("Model solved!")
-                ob_rms = utils.env.get_ob_rms(envs)
-                assert(ob_rms != None)
-                envs.close()
-                return agent.actor_critic, ob_rms, total_num_steps
-                # if not os.path.exists("models"): os.mkdir("models")
-                # agent.actor_critic.save_model(model_name, ob_rms)
+                print("Model solved! Continue")
+                ret_steps = total_num_steps
+                break
     
-    print("Not solved.")
+    if ret_steps == -1: print("Not solved.")
     ob_rms = utils.env.get_ob_rms(envs)
     assert(ob_rms != None)
     envs.close()
-    return agent.actor_critic, ob_rms, -1
+    return agent.actor_critic, ob_rms, ret_steps

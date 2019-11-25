@@ -8,7 +8,7 @@ def cat_lists(x):
 
 def make_deterministic(env, seed = 0):
     env.seed(seed)
-    torch.manual_seed(seed)
+    # torch.manual_seed(seed)
     np.random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
