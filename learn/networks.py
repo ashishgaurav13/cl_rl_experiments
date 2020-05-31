@@ -4,105 +4,17 @@ import torch.optim as optim
 import utils.torch
 import numpy as np
 
-class Actor(nn.Module):
-
-    def __init__(self, lr, num_inputs, action_space, h = [400, 300]):
-
-        super(Actor, self).__init__()
-        self.action_space = action_space
-        num_outputs = action_space.shape[0]
-
-        self.linear1 = nn.Linear(num_inputs, h[0])
-        self.linear2 = nn.Linear(h[0], h[1])
-        self.mu = nn.Linear(h[1], num_outputs)
-        torch.nn.init.uniform_(self.mu.weight.data, -0.003, 0.003)
-        torch.nn.init.uniform_(self.mu.bias.data, -0.003, 0.003)
-
-        self.relu, self.tanh = nn.ReLU(), nn.Tanh()
-        self.optimizer = optim.Adam(self.parameters(), lr)
-
-    def forward(self, inputs):
-        x = inputs
-        x = self.linear1(x)
-        x = self.relu(x)
-        x = self.linear2(x)
-        x = self.relu(x)
-        x = self.mu(x)
-        x = self.tanh(x)
-        return x
-
-class Critic(nn.Module):
-
-    def __init__(self, lr, num_inputs, action_space, h = [400, 300]):
-        super(Critic, self).__init__()
-        self.action_space = action_space
-        num_outputs = action_space.shape[0]
-
-        self.linear1 = nn.Linear(num_inputs, h[0])
-        self.linear2 = nn.Linear(h[0]+num_outputs, h[1])
-        self.V = nn.Linear(h[1], 1)
-        torch.nn.init.uniform_(self.V.weight.data, -0.0003, 0.0003)
-        torch.nn.init.uniform_(self.V.bias.data, -0.0003, 0.0003)
-
-        self.relu = nn.ReLU()
-        self.optimizer = optim.Adam(self.parameters(), lr)
-
-    def forward(self, inputs, actions):
-        x = inputs
-        x = self.linear1(x)
-        x = self.relu(x)
-        x = self.linear2(torch.cat((x, actions), 1))
-        x = self.relu(x)
-        V = self.V(x)
-        return V
-
-class CriticTD3(nn.Module):
-
-    def __init__(self, lr, num_inputs, action_space, h = [256, 256]):
-        super(CriticTD3, self).__init__()
-        self.action_space = action_space
-        num_outputs = action_space.shape[0]
-
-        self.linear1 = nn.Linear(num_inputs+num_outputs, h[0])
-        self.linear2 = nn.Linear(h[0], h[1])
-        self.V = nn.Linear(h[1], 1)
-        torch.nn.init.uniform_(self.V.weight.data, -0.0003, 0.0003)
-        torch.nn.init.uniform_(self.V.bias.data, -0.0003, 0.0003)
-
-        self.linear3 = nn.Linear(num_inputs+num_outputs, h[0])
-        self.linear4 = nn.Linear(h[0], h[1])
-        self.W = nn.Linear(h[1], 1)
-        torch.nn.init.uniform_(self.W.weight.data, -0.0003, 0.0003)
-        torch.nn.init.uniform_(self.W.bias.data, -0.0003, 0.0003)
-
-        self.relu = nn.ReLU()
-        self.optimizer = optim.Adam(self.parameters(), lr)
-
-    def forward(self, inputs, actions, both = True):
-        x = torch.cat((inputs, actions), 1)
-        if both:
-            v1, v2 = self.linear1(x), self.linear3(x)
-            v1, v2 = self.relu(v1), self.relu(v2)
-            v1, v2 = self.linear2(v1), self.linear4(v2)
-            v1, v2 = self.relu(v1), self.relu(v2)
-            v1, v2 = self.V(v1), self.W(v2)
-            return v1, v2
-        else:
-            v = self.linear1(x)
-            v = self.relu(v)
-            v = self.linear2(v)
-            v = self.relu(v)
-            v = self.V(v)
-            return v
-
 class PolicyPPO(nn.Module):
     
-    def __init__(self, obs_shape, action_space, hidden_size = 64):
+    def __init__(self, obs_shape, action_space, hidden_size = 100):
         super(PolicyPPO, self).__init__()
 
         num_inputs = obs_shape[0]
         init_ = lambda m: utils.torch.init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), np.sqrt(2))
+        self.num_inputs = num_inputs
+        self.hidden_size = hidden_size
+        self.init_ = init_
 
         self.actor = nn.Sequential(
             init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
@@ -124,6 +36,14 @@ class PolicyPPO(nn.Module):
             self.dist = utils.torch.DiagGaussian(hidden_size, num_outputs)
         else:
             raise NotImplementedError
+
+    def reinit_critic(self):
+
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.critic = nn.Sequential(
+            self.init_(nn.Linear(self.num_inputs, self.hidden_size)), nn.Tanh(),
+            self.init_(nn.Linear(self.hidden_size, self.hidden_size)), nn.Tanh()).to(device)
+        self.critic_linear = self.init_(nn.Linear(self.hidden_size, 1)).to(device)
 
     def forward(self, inputs):
         x = inputs

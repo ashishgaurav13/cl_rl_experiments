@@ -1,4 +1,5 @@
 import sys, datetime, os
+import json, collections
 import time
 
 # https://stackoverflow.com/questions/17866724/
@@ -40,3 +41,38 @@ def timer_done(start_time):
 def nowarnings():
     import warnings
     warnings.filterwarnings("ignore")
+
+def dict_sort(x):
+    if type(x) != dict:
+        return x
+    def convert_numeric(x):
+        try:
+            ret = float(x)
+        except:
+            return x
+        else:
+            return ret
+    return dict(collections.OrderedDict(
+        sorted([(item[0], dict_sort(item[1])) for item in x.items()],
+            key = lambda x: convert_numeric(x[0]))))
+
+def json_dump(x, f = "log.txt", show = False):
+    assert(type(x) == dict)
+    x = dict_sort(x)
+    ff = open(f, "w")
+    json.dump(x, ff, indent = 2)
+    ff.close()
+    if show:
+        print(json.dumps(x, indent = 2))
+
+def json_load(f = "log.txt", show = False):
+    if not os.path.exists(f):
+        json_dump({}, f)
+    ff = open(f, "r")
+    ret = json.load(ff)
+    ff.close()
+    ret = dict_sort(ret)
+    json_dump(ret, f)
+    if show:
+        print(json.dumps(ret, indent = 2))
+    return ret

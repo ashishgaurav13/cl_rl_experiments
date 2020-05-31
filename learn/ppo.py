@@ -23,13 +23,25 @@ class PPO():
                  num_steps = 128,
                  num_processes = None,
                  linear_schedule = True,
+                 linear_schedule_mode = 0,
                  use_gae = True,
                  gae_lambda = 0.95,
                  use_proper_time_limits = False,
-                 gamma = 0.99):
+                 gamma = 0.99,
+                 policy = None,
+                 hidden = -1,
+                 policy_class = PolicyPPO):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.actor_critic = PolicyPPO(obs_space.shape, action_space).to(self.device)
+        if policy != None:
+            print("Loading provided policy!")
+            self.actor_critic = policy
+        else:
+            if hidden == -1: hidden = 64
+            print("Creating networks with hidden = %d" % hidden)
+            print("policy_class = %s" % policy_class.__name__)
+            self.actor_critic = policy_class(obs_space.shape, action_space,
+                hidden_size = hidden).to(self.device)
 
         self.clip_param = clip_param
         self.ppo_epoch = ppo_epoch
@@ -55,7 +67,16 @@ class PPO():
 
         self.lr = lr
         self.linear_schedule = linear_schedule
-        self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=lr, eps=eps)
+        self.linear_schedule_mode = linear_schedule_mode
+        actor_params = []
+        critic_params = []
+        for k, v in self.actor_critic.named_parameters():
+            if "critic" in k:
+                critic_params += [v]
+            else:
+                actor_params += [v]
+        self.actor_optimizer = optim.RMSprop(actor_params, lr=lr, eps = eps)
+        self.critic_optimizer = optim.RMSprop(critic_params, lr=lr, eps = eps)
         self.use_gae = use_gae
         self.gae_lambda = gae_lambda
         self.use_proper_time_limits = use_proper_time_limits
@@ -67,7 +88,8 @@ class PPO():
     def pre_step(self, j, num_updates):
         if self.linear_schedule:
             # decrease learning rate linearly
-            utils.torch.update_linear_schedule(self.optimizer, j, num_updates, self.lr)
+            utils.torch.update_linear_schedule(self.actor_optimizer, j, num_updates, self.lr, mode = self.linear_schedule_mode)
+            utils.torch.update_linear_schedule(self.critic_optimizer, j, num_updates, self.lr, mode = self.linear_schedule_mode)
 
     def step(self, envs, log = None):
 
@@ -83,6 +105,8 @@ class PPO():
 
             if log != None:
                 assert(type(log) == dict)
+                if 'traj' in log.keys():
+                    log['traj'].see(obs, reward, done, infos)
                 for info in infos:
                     if 'episode' in info.keys():
                         log['r'].append(info['episode']['r'])
@@ -112,6 +136,9 @@ class PPO():
         self.rollouts.after_update()
         return value_loss, action_loss, dist_entropy
 
+    def compute_regularization_loss(self):
+        return torch.tensor(0.0).to(self.device)
+
     def update(self, rollouts):
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
         advantages = (advantages - advantages.mean()) / (
@@ -120,6 +147,7 @@ class PPO():
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        reg_loss_epoch = 0
 
         for e in range(self.ppo_epoch):
 
@@ -141,6 +169,7 @@ class PPO():
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param,
                                     1.0 + self.clip_param) * adv_targ
                 action_loss = -torch.min(surr1, surr2).mean()
+                reg_loss = self.compute_regularization_loss()
 
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
@@ -153,21 +182,29 @@ class PPO():
                 else:
                     value_loss = 0.5 * (return_batch - values).pow(2).mean()
 
-                self.optimizer.zero_grad()
-                (value_loss * self.value_loss_coef + action_loss -
-                 dist_entropy * self.entropy_coef).backward()
+                self.actor_optimizer.zero_grad()
+                self.critic_optimizer.zero_grad()
+                (value_loss * self.value_loss_coef).backward()
+                (action_loss - dist_entropy * self.entropy_coef).backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(),
                                          self.max_grad_norm)
-                self.optimizer.step()
+                self.actor_optimizer.step()
+                self.critic_optimizer.step()
+                if reg_loss != torch.tensor(0.0).to(self.device):
+                    self.actor_optimizer.zero_grad()
+                    reg_loss.backward()
+                    self.actor_optimizer.step()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                reg_loss_epoch += reg_loss.item()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
+        reg_loss_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+        return value_loss_epoch, action_loss_epoch, [dist_entropy_epoch, reg_loss_epoch]

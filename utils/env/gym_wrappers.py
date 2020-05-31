@@ -49,9 +49,11 @@ class VecNormalize(VecNormalize_):
         if self.ob_rms:
             if self.training and update:
                 self.ob_rms.update(obs)
-            obs = np.clip((obs - self.ob_rms.mean) /
+            n = 7
+            new_obs = np.clip((obs - self.ob_rms.mean) /
                           np.sqrt(self.ob_rms.var + self.epsilon),
                           -self.clipob, self.clipob)
+            obs[:,:n] = new_obs[:,:n]
             return obs
         else:
             return obs

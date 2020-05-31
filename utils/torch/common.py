@@ -1,13 +1,14 @@
 import torch
 import torch.nn as nn
 import numpy as np
+import os
 
 def cat_lists(x):
     return torch.cat([torch.Tensor(xitem) for xitem in x])
 
 def make_deterministic(env, seed = 0):
     env.seed(seed)
-    torch.manual_seed(seed)
+    # torch.manual_seed(seed)
     np.random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
@@ -29,3 +30,9 @@ class AddBias(nn.Module):
         else:
             bias = self._bias.t().view(1, -1, 1, 1)
         return x + bias
+
+def load_empty_policy(classname, f, hidden = 64):
+    assert(os.path.exists(f))
+    [obs_space, action_space] = torch.load(f)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return classname(obs_space.shape, action_space, hidden_size = hidden).to(device)
