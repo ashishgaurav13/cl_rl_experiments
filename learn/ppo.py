@@ -29,7 +29,8 @@ class PPO():
                  use_proper_time_limits = False,
                  gamma = 0.99,
                  policy = None,
-                 hidden = -1):
+                 hidden = -1,
+                 policy_class = PolicyPPO):
 
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if policy != None:
@@ -38,7 +39,8 @@ class PPO():
         else:
             if hidden == -1: hidden = 64
             print("Creating networks with hidden = %d" % hidden)
-            self.actor_critic = PolicyPPO(obs_space.shape, action_space,
+            print("policy_class = %s" % policy_class.__name__)
+            self.actor_critic = policy_class(obs_space.shape, action_space,
                 hidden_size = hidden).to(self.device)
 
         self.clip_param = clip_param
@@ -103,6 +105,8 @@ class PPO():
 
             if log != None:
                 assert(type(log) == dict)
+                if 'traj' in log.keys():
+                    log['traj'].see(obs, reward, done, infos)
                 for info in infos:
                     if 'episode' in info.keys():
                         log['r'].append(info['episode']['r'])
@@ -132,6 +136,9 @@ class PPO():
         self.rollouts.after_update()
         return value_loss, action_loss, dist_entropy
 
+    def compute_regularization_loss(self):
+        return torch.tensor(0.0).to(self.device)
+
     def update(self, rollouts):
         advantages = rollouts.returns[:-1] - rollouts.value_preds[:-1]
         advantages = (advantages - advantages.mean()) / (
@@ -140,6 +147,7 @@ class PPO():
         value_loss_epoch = 0
         action_loss_epoch = 0
         dist_entropy_epoch = 0
+        reg_loss_epoch = 0
 
         for e in range(self.ppo_epoch):
 
@@ -161,6 +169,7 @@ class PPO():
                 surr2 = torch.clamp(ratio, 1.0 - self.clip_param,
                                     1.0 + self.clip_param) * adv_targ
                 action_loss = -torch.min(surr1, surr2).mean()
+                reg_loss = self.compute_regularization_loss()
 
                 if self.use_clipped_value_loss:
                     value_pred_clipped = value_preds_batch + \
@@ -181,15 +190,21 @@ class PPO():
                                          self.max_grad_norm)
                 self.actor_optimizer.step()
                 self.critic_optimizer.step()
+                if reg_loss != torch.tensor(0.0).to(self.device):
+                    self.actor_optimizer.zero_grad()
+                    reg_loss.backward()
+                    self.actor_optimizer.step()
 
                 value_loss_epoch += value_loss.item()
                 action_loss_epoch += action_loss.item()
                 dist_entropy_epoch += dist_entropy.item()
+                reg_loss_epoch += reg_loss.item()
 
         num_updates = self.ppo_epoch * self.num_mini_batch
 
         value_loss_epoch /= num_updates
         action_loss_epoch /= num_updates
         dist_entropy_epoch /= num_updates
+        reg_loss_epoch /= num_updates
 
-        return value_loss_epoch, action_loss_epoch, dist_entropy_epoch
+        return value_loss_epoch, action_loss_epoch, [dist_entropy_epoch, reg_loss_epoch]

@@ -73,13 +73,13 @@ def get_ob_rms(envs):
     return None
 
 def evaluate_ppo(network, ob_rms, env, device, num_episodes = 10,
-    time_limit = 400, render = False, wrap = True, silent = False):
+    time_limit = 400, render = False, wrap = True, silent = False, discrete = False):
 
     orig_env = env
     if wrap:
         env = wrap_env(
             env,
-            action_normalize = True,
+            action_normalize = not discrete,
             time_limit = time_limit,
             deterministic = True,
         )
