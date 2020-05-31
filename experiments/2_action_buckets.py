@@ -12,11 +12,10 @@ import matplotlib.pyplot as plt
 import os
 
 all_envs = {
-    0: ("models/no_stopped_car.pt", craft.NoStoppedCarEnv),
-    0.5: ("models/one_stopped_car_o.pt", craft.OneStoppedCarOEnv),
-    1: ("models/one_stopped_car.pt", craft.OneStoppedCarEnv),
-    2: ("models/two_stopped_cars.pt", craft.TwoStoppedCarsEnv),
-    3: ("models/three_stopped_cars_sso.pt", craft.ThreeStoppedCarsSSO),
+    0: ("models/ob_rms/osco.pt", craft.OneStoppedCarOEnv),
+    1: ("models/ob_rms/osc.pt", craft.OneStoppedCarEnv),
+    2: ("models/ob_rms/2sc.pt", craft.TwoStoppedCarsEnv),
+    3: ("models/ob_rms/3sc.pt", craft.ThreeStoppedCarsSSO),
 }
 num_episodes = 10
 render = False

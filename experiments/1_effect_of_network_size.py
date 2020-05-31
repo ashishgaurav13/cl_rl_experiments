@@ -10,11 +10,10 @@ import json
 import numpy as np
 
 all_envs = {
-    0: ("models/ob_rms/no_stopped_car.pt", craft.NoStoppedCarEnv),
-    0.5: ("models/ob_rms/one_stopped_car_o.pt", craft.OneStoppedCarOEnv),
-    1: ("models/ob_rms/one_stopped_car.pt", craft.OneStoppedCarEnv),
-    2: ("models/ob_rms/two_stopped_cars.pt", craft.TwoStoppedCarsEnv),
-    3: ("models/ob_rms/three_stopped_cars.pt", craft.ThreeStoppedCarsSSO),
+    0: ("models/ob_rms/osco.pt", craft.OneStoppedCarOEnv),
+    1: ("models/ob_rms/osc.pt", craft.OneStoppedCarEnv),
+    2: ("models/ob_rms/2sc.pt", craft.TwoStoppedCarsEnv),
+    3: ("models/ob_rms/3sc.pt", craft.ThreeStoppedCarsSSO),
 }
 
 steps = 1.5e5 # 1e6
@@ -38,6 +37,6 @@ for env_id in all_envs.keys():
             learn.train_ppo(env, steps, ob_rms = ob_rms, hidden = hidden,
                 linear_schedule = False, clip_param = 0.3)
         steps_to_solve[str(env_id)][str(hidden)] = total_num_steps
-        utils.json_dump(steps_to_solve, f = "graphs/1_effect_of_network_size.txt")
 
-utils.json_dump(steps_to_solve, f = "graphs/1_effect_of_network_size.txt", show = True)
+print(steps_to_solve)
+# utils.json_dump(steps_to_solve, f = "effect_of_network_size.txt", show = True)
